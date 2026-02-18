@@ -147,14 +147,29 @@ const ollama_fallback = [_][]const u8{
 
 const MAX_MODELS = 20;
 
+/// Return a heap-allocated copy of the static fallback list for a provider.
+/// Caller owns the returned slice and all its strings.
+fn dupeFallbackModels(allocator: std.mem.Allocator, provider: []const u8) ![][]const u8 {
+    const static = fallbackModelsForProvider(provider);
+    var result: std.ArrayListUnmanaged([]const u8) = .empty;
+    errdefer {
+        for (result.items) |item| allocator.free(item);
+        result.deinit(allocator);
+    }
+    for (static) |m| {
+        try result.append(allocator, try allocator.dupe(u8, m));
+    }
+    return result.toOwnedSlice(allocator);
+}
+
 /// Fetch available model IDs for a provider (with caching, limit, and fallback).
 ///
 /// Uses file-based cache at `~/.nullclaw/state/models_cache.json` with 12h TTL.
-/// Returns at most 20 model IDs. On any error, returns hardcoded fallback.
-/// Caller does NOT own the returned slice when fallback is returned (static data).
-pub fn fetchModels(allocator: std.mem.Allocator, provider: []const u8, api_key: ?[]const u8) ![]const []const u8 {
+/// Returns at most 20 model IDs. Caller ALWAYS owns the returned slice and strings.
+/// Free with: for (models) |m| allocator.free(m); allocator.free(models);
+pub fn fetchModels(allocator: std.mem.Allocator, provider: []const u8, api_key: ?[]const u8) ![][]const u8 {
     const home = std.process.getEnvVarOwned(allocator, "HOME") catch
-        return fallbackModelsForProvider(provider);
+        return dupeFallbackModels(allocator, provider);
     defer allocator.free(home);
 
     const state_dir = try std.fmt.allocPrint(allocator, "{s}/.nullclaw/state", .{home});
@@ -163,7 +178,7 @@ pub fn fetchModels(allocator: std.mem.Allocator, provider: []const u8, api_key: 
     // Ensure state directory exists
     std.fs.makeDirAbsolute(state_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
-        else => return fallbackModelsForProvider(provider),
+        else => return dupeFallbackModels(allocator, provider),
     };
 
     return loadModelsWithCache(allocator, state_dir, provider, api_key);
@@ -265,10 +280,10 @@ fn fetchAndParseModels(allocator: std.mem.Allocator, url: []const u8, headers: [
 }
 
 /// Load models with file-based cache. Cache expires after 12 hours.
-/// Falls back to hardcoded list on any error.
-pub fn loadModelsWithCache(allocator: std.mem.Allocator, cache_dir: []const u8, provider: []const u8, api_key: ?[]const u8) []const []const u8 {
+/// Falls back to hardcoded list on any error. Caller ALWAYS owns the result.
+pub fn loadModelsWithCache(allocator: std.mem.Allocator, cache_dir: []const u8, provider: []const u8, api_key: ?[]const u8) ![][]const u8 {
     return loadModelsWithCacheInner(allocator, cache_dir, provider, api_key) catch {
-        return fallbackModelsForProvider(provider);
+        return dupeFallbackModels(allocator, provider);
     };
 }
 
@@ -570,7 +585,11 @@ pub fn runWizard(allocator: std.mem.Allocator) !void {
     try out.flush();
 
     const live_models = fetchModels(allocator, selected_provider.key, cfg.api_key) catch
-        fallbackModelsForProvider(selected_provider.key);
+        try dupeFallbackModels(allocator, selected_provider.key);
+    defer {
+        for (live_models) |m| allocator.free(m);
+        allocator.free(live_models);
+    }
 
     // Show up to 15 models as numbered choices
     const display_max: usize = @min(live_models.len, 15);
@@ -1676,8 +1695,11 @@ test "cache read returns error for expired cache" {
 
 test "loadModelsWithCache falls back on fetch failure" {
     // openai without api key will fail fetch, falling back to hardcoded list
-    const models = loadModelsWithCache(std.testing.allocator, "/tmp/nonexistent-dir-xyz", "openai", null);
-    // Should return static fallback
+    const models = try loadModelsWithCache(std.testing.allocator, "/tmp/nonexistent-dir-xyz", "openai", null);
+    defer {
+        for (models) |m| std.testing.allocator.free(m);
+        std.testing.allocator.free(models);
+    }
     try std.testing.expect(models.len >= 3);
     try std.testing.expectEqualStrings("gpt-5.2", models[0]);
 }
@@ -1690,7 +1712,7 @@ test "loadModelsWithCache returns models for anthropic" {
     };
     defer std.fs.deleteTreeAbsolute(cache_dir) catch {};
 
-    const models = loadModelsWithCache(std.testing.allocator, cache_dir, "anthropic", null);
+    const models = try loadModelsWithCache(std.testing.allocator, cache_dir, "anthropic", null);
     // Anthropic returns hardcoded models (allocated copies)
     defer {
         for (models) |m| std.testing.allocator.free(m);
@@ -1785,13 +1807,20 @@ test "fetchModels returns models for deepseek (no network)" {
 test "fetchModels returns fallback for openai without key" {
     // OpenAI needs auth — without key, should gracefully fall back
     const models = try fetchModels(std.testing.allocator, "openai", null);
+    defer {
+        for (models) |m| std.testing.allocator.free(m);
+        std.testing.allocator.free(models);
+    }
     try std.testing.expect(models.len >= 3);
     try std.testing.expectEqualStrings("gpt-5.2", models[0]);
 }
 
 test "fetchModels returns fallback for unknown provider" {
     const models = try fetchModels(std.testing.allocator, "some-random-provider", null);
-    // Should return anthropic fallback (static, not owned)
+    defer {
+        for (models) |m| std.testing.allocator.free(m);
+        std.testing.allocator.free(models);
+    }
     try std.testing.expect(models.len >= 3);
     try std.testing.expectEqualStrings("claude-opus-4-6", models[0]);
 }
