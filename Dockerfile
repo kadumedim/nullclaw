@@ -3,14 +3,12 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
 FROM alpine:3.20 AS builder
 
-ARG ZIG_VERSION=0.15.0
-ARG TARGETOS=linux
-ARG TARGETARCH=x86_64
+ARG ZIG_VERSION=0.15.2
 
 RUN apk add --no-cache curl xz
 
 RUN curl -fsSL \
-    "https://ziglang.org/download/${ZIG_VERSION}/zig-${TARGETOS}-${TARGETARCH}-${ZIG_VERSION}.tar.xz" \
+    "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
     -o /tmp/zig.tar.xz \
   && mkdir -p /usr/local/zig \
   && tar -xJf /tmp/zig.tar.xz --strip-components=1 -C /usr/local/zig \
