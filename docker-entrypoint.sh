@@ -9,6 +9,7 @@ ARG TARGETARCH=x86_64
 
 RUN apk add --no-cache curl xz
 
+# Download the official Zig tarball
 RUN curl -fsSL \
     "https://ziglang.org/download/${ZIG_VERSION}/zig-${TARGETOS}-${TARGETARCH}-${ZIG_VERSION}.tar.xz" \
     -o /tmp/zig.tar.xz \
@@ -30,14 +31,14 @@ RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /src/zig-out/bin/nullclaw /usr/local/bin/nullclaw
 
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
 RUN addgroup -S nullclaw && adduser -S nullclaw -G nullclaw
 USER nullclaw
 
 WORKDIR /home/nullclaw
 
+# Railway injects PORT; nullclaw gateway reads --port
 ENV PORT=3000
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["docker-entrypoint.sh"]
