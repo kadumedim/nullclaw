@@ -29,7 +29,8 @@ RUN apk add --no-cache ca-certificates sqlite-libs
 COPY --from=builder /src/zig-out/bin/nullclaw /usr/local/bin/nullclaw
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r//' /usr/local/bin/docker-entrypoint.sh \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 RUN addgroup -S nullclaw && adduser -S nullclaw -G nullclaw
 USER nullclaw
@@ -38,4 +39,4 @@ WORKDIR /home/nullclaw
 
 ENV PORT=3000
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "/usr/local/bin/docker-entrypoint.sh"]
