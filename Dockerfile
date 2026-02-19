@@ -5,7 +5,7 @@ FROM alpine:3.20 AS builder
 
 ARG ZIG_VERSION=0.15.2
 
-RUN apk add --no-cache curl xz
+RUN apk add --no-cache curl xz sqlite-dev
 
 RUN curl -fsSL \
     "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
@@ -24,7 +24,7 @@ RUN zig build -Doptimize=ReleaseSmall
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates sqlite-libs
 
 COPY --from=builder /src/zig-out/bin/nullclaw /usr/local/bin/nullclaw
 
