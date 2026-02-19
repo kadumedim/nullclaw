@@ -1,44 +1,37 @@
-# syntax=docker/dockerfile:1
+#!/bin/sh
+set -e
 
-# ── Build stage ──────────────────────────────────────────────────────────────
-FROM alpine:3.20 AS builder
+CONFIG_DIR="${HOME}/.nullclaw"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
 
-ARG ZIG_VERSION=0.15.0
-ARG TARGETOS=linux
-ARG TARGETARCH=x86_64
+mkdir -p "${CONFIG_DIR}"
 
-RUN apk add --no-cache curl xz
+if [ ! -f "${CONFIG_FILE}" ]; then
+  cat > "${CONFIG_FILE}" <<EOF
+{
+  "api_key": "${NULLCLAW_API_KEY}",
+  "default_provider": "${NULLCLAW_PROVIDER:-openrouter}",
+  "default_model": "${NULLCLAW_MODEL:-anthropic/claude-sonnet-4}",
+  "default_temperature": 0.7,
+  "memory": {
+    "backend": "sqlite",
+    "auto_save": true
+  },
+  "gateway": {
+    "port": ${PORT:-3000},
+    "require_pairing": false,
+    "allow_public_bind": true
+  },
+  "autonomy": {
+    "level": "supervised"
+  },
+  "identity": {
+    "format": "openclaw"
+  }
+}
+EOF
+fi
 
-# Download the official Zig tarball
-RUN curl -fsSL \
-    "https://ziglang.org/download/${ZIG_VERSION}/zig-${TARGETOS}-${TARGETARCH}-${ZIG_VERSION}.tar.xz" \
-    -o /tmp/zig.tar.xz \
-  && mkdir -p /usr/local/zig \
-  && tar -xJf /tmp/zig.tar.xz --strip-components=1 -C /usr/local/zig \
-  && rm /tmp/zig.tar.xz
-
-ENV PATH="/usr/local/zig:${PATH}"
-
-WORKDIR /src
-COPY . .
-
-RUN zig build -Doptimize=ReleaseSmall
-
-# ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM alpine:3.20
-
-RUN apk add --no-cache ca-certificates
-
-COPY --from=builder /src/zig-out/bin/nullclaw /usr/local/bin/nullclaw
-
-RUN addgroup -S nullclaw && adduser -S nullclaw -G nullclaw
-USER nullclaw
-
-WORKDIR /home/nullclaw
-
-# Railway injects PORT; nullclaw gateway reads --port
-ENV PORT=3000
-
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-
-ENTRYPOINT ["docker-entrypoint.sh"]
+exec nullclaw gateway \
+  --port "${PORT:-3000}" \
+  --bind 0.0.0.0
