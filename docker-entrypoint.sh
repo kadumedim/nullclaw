@@ -34,4 +34,4 @@ fi
 
 exec nullclaw gateway \
   --port "${PORT:-3000}" \
-  --bind 0.0.0.0
+  --host 0.0.0.0
