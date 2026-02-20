@@ -21,19 +21,15 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     "keyword_weight": ${NULLCLAW_KEYWORD_WEIGHT:-0.3}
   },
   "gateway": {
-    "port": ${PORT:-8080},
+    "port": ${PORT:-3000},
     "require_pairing": false,
     "allow_public_bind": true
   },
   "autonomy": {
     "level": "${NULLCLAW_AUTONOMY_LEVEL:-supervised}",
     "workspace_only": ${NULLCLAW_WORKSPACE_ONLY:-true},
-    "max_actions_per_hour": ${NULLCLAW_MAX_ACTIONS_PER_HOUR:-20}
-  },
-  "cost": {
-    "enabled": ${NULLCLAW_COST_ENABLED:-false},
-    "daily_limit_usd": ${NULLCLAW_DAILY_LIMIT_USD:-10.0},
-    "monthly_limit_usd": ${NULLCLAW_MONTHLY_LIMIT_USD:-100.0}
+    "max_actions_per_hour": ${NULLCLAW_MAX_ACTIONS_PER_HOUR:-20},
+    "max_cost_per_day_cents": ${NULLCLAW_MAX_COST_PER_DAY_CENTS:-500}
   },
   "security": {
     "sandbox": {
@@ -66,5 +62,5 @@ EOF
 fi
 
 exec nullclaw gateway \
-  --port "${PORT:-8080}" \
-  --host 0.0.0.0
+  --host 0.0.0.0 \
+  --port "${PORT:-3000}"
