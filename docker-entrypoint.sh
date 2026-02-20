@@ -67,3 +67,4 @@ fi
 
 exec nullclaw gateway \
   --port "${PORT:-8080}" \
+  --host 0.0.0.0
